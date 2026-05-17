@@ -469,6 +469,7 @@ impl ExprSchemable for Expr {
     ///
     /// [`return_field_from_args`]: crate::ScalarUDF::return_field_from_args
     /// [`return_field`]: crate::AggregateUDF::return_field
+    #[cfg_attr(feature = "recursive_protection", recursive::recursive)]
     fn to_field(
         &self,
         schema: &dyn ExprSchema,

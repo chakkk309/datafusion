@@ -2774,6 +2774,39 @@ macro_rules! expr_vec_fmt {
 }
 
 struct SchemaDisplay<'a>(&'a Expr);
+
+enum SchemaDisplayPart<'a> {
+    Expr(&'a Expr),
+    Operator(&'a Operator),
+}
+
+fn write_binary_schema_display(
+    f: &mut Formatter<'_>,
+    left: &Expr,
+    op: &Operator,
+    right: &Expr,
+) -> fmt::Result {
+    let mut stack = vec![
+        SchemaDisplayPart::Expr(right),
+        SchemaDisplayPart::Operator(op),
+        SchemaDisplayPart::Expr(left),
+    ];
+
+    while let Some(part) = stack.pop() {
+        match part {
+            SchemaDisplayPart::Expr(Expr::BinaryExpr(BinaryExpr { left, op, right })) => {
+                stack.push(SchemaDisplayPart::Expr(right));
+                stack.push(SchemaDisplayPart::Operator(op));
+                stack.push(SchemaDisplayPart::Expr(left));
+            }
+            SchemaDisplayPart::Expr(expr) => write!(f, "{}", SchemaDisplay(expr))?,
+            SchemaDisplayPart::Operator(op) => write!(f, " {op} ")?,
+        }
+    }
+
+    Ok(())
+}
+
 impl Display for SchemaDisplay<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.0 {
@@ -2828,7 +2861,7 @@ impl Display for SchemaDisplay<'_> {
                 }
             }
             Expr::BinaryExpr(BinaryExpr { left, op, right }) => {
-                write!(f, "{} {op} {}", SchemaDisplay(left), SchemaDisplay(right),)
+                write_binary_schema_display(f, left, op, right)
             }
             Expr::Case(Case {
                 expr,
@@ -4007,6 +4040,17 @@ mod test {
             ),
             "column_name"
         );
+    }
+
+    #[test]
+    fn test_schema_display_deep_binary_expr() {
+        let mut expr = lit(1);
+        for _ in 0..2000 {
+            expr = expr + lit(1);
+        }
+
+        let schema_name = expr.schema_name().to_string();
+        assert_eq!(schema_name.matches('+').count(), 2000);
     }
 
     fn wildcard_options(
